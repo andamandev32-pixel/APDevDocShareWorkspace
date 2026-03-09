@@ -1,0 +1,482 @@
+// Default initial data if none exists
+const defaultProjects = [
+    {
+        id: '1',
+        title: 'Demo Website Header',
+        desc: 'A simple responsive header using HTML, CSS, and basic JS for mobile menu.',
+        pin: '12345',
+        type: 'bundle',
+        html: '<header class="demo-header">\n  <h2>Logo</h2>\n  <button onclick="alert(\'Menu Clicked\')">Menu</button>\n</header>',
+        css: 'body { margin:0; font-family: sans-serif; }\n.demo-header {\n  display: flex;\n  justify-content: space-between;\n  padding: 1rem 2rem;\n  background: #f1f5f9;\n  border-bottom: 1px solid #cbd5e1;\n}',
+        js: 'console.log("Header loaded.");',
+        createdAt: new Date().toISOString()
+    },
+    {
+        id: '2',
+        title: 'React Button Component',
+        desc: 'A snippet for a reusable React button component with variants.',
+        pin: '54321',
+        type: 'jsx',
+        jsx: 'import React from "react";\n\nconst Button = ({ variant = "primary", children, ...props }) => {\n  const baseStyle = "px-4 py-2 rounded font-medium";\n  const variants = {\n    primary: "bg-blue-600 text-white",\n    outline: "border border-gray-300 text-gray-700"\n  };\n  return (\n    <button className={`${baseStyle} ${variants[variant]}`} {...props}>\n      {children}\n    </button>\n  );\n};\n\nexport default Button;',
+        createdAt: new Date().toISOString()
+    }
+];
+
+// App State
+let projects = JSON.parse(localStorage.getItem('docshare_projects')) || defaultProjects;
+let currentPreviewId = null;
+
+// DOM Elements
+const grid = document.getElementById('projectGrid');
+const addBtn = document.getElementById('addProjectBtn');
+const addModal = document.getElementById('addModal');
+const pinModal = document.getElementById('pinModal');
+const closeBtns = document.querySelectorAll('.close-btn, [data-modal]');
+
+// Form Elements
+const addForm = document.getElementById('addProjectForm');
+const pType = document.getElementById('pType');
+const bundleInputs = document.getElementById('bundleInputs');
+const jsxInputs = document.getElementById('jsxInputs');
+
+// Share Modal
+const shareModal = document.getElementById('shareModal');
+const shareLinkInput = document.getElementById('shareLinkInput');
+const copyShareBtn = document.getElementById('copyShareBtn');
+
+// PIN Elements
+const pinInput = document.getElementById('verifyPin');
+const pinDots = document.querySelectorAll('.pin-dot');
+const pinError = document.getElementById('pinError');
+
+// Preview Elements (Removed modal elements, now using new tab)
+
+// Initialization
+function init() {
+    saveData();
+    renderGrid();
+    setupEventListeners();
+    checkShareLink();
+}
+
+function checkShareLink() {
+    const hash = window.location.hash;
+    if (hash.startsWith('#share=')) {
+        try {
+            const dataStr = atob(hash.replace('#share=', ''));
+            const sharedProj = JSON.parse(decodeURIComponent(dataStr));
+
+            // Clean hash to prevent repeated opens on refresh
+            window.history.replaceState(null, null, ' ');
+
+            handlePreview(sharedProj);
+        } catch (e) {
+            console.error('Failed to parse shared link', e);
+            alert('This share link is invalid or corrupted.');
+        }
+    }
+}
+
+function saveData() {
+    localStorage.setItem('docshare_projects', JSON.stringify(projects));
+}
+
+function renderGrid() {
+    grid.innerHTML = '';
+
+    if (projects.length === 0) {
+        grid.innerHTML = `
+            <div class="empty-state">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="12" y1="18" x2="12" y2="12"></line><line x1="9" y1="15" x2="15" y2="15"></line></svg>
+                <h3>No Projects Yet</h3>
+                <p>Click "Add Summary" to create your first protected document.</p>
+            </div>
+        `;
+        return;
+    }
+
+    // Sort by favorite first, then newest
+    const sorted = [...projects].sort((a, b) => {
+        if (a.favorite && !b.favorite) return -1;
+        if (!a.favorite && b.favorite) return 1;
+        return new Date(b.createdAt) - new Date(a.createdAt);
+    });
+
+    sorted.forEach(p => {
+        const card = document.createElement('div');
+        card.className = 'card';
+        card.innerHTML = `
+            <div class="card-header">
+                <span class="card-type">${p.type === 'bundle' ? 'HTML/CSS/JS' : 'JSX'}</span>
+                <div class="card-actions">
+                    <button class="icon-btn star-btn ${p.favorite ? 'active' : ''}" onclick="toggleFavorite('${p.id}', event)" title="Favorite">★</button>
+                    <button class="icon-btn share-btn" onclick="shareProject('${p.id}', event)" title="Share Link">🔗</button>
+                    <button class="icon-btn edit-btn" onclick="editProject('${p.id}', event)" title="Edit">✏️</button>
+                    <button class="icon-btn delete-btn" onclick="deleteProject('${p.id}', event)" title="Delete">🗑️</button>
+                </div>
+            </div>
+            <h3 class="card-title">${escapeHTML(p.title)}</h3>
+            <p class="card-desc">${escapeHTML(p.desc)}</p>
+            <div class="card-footer">
+                <div class="card-lock" style="color: ${p.pin ? '#f59e0b' : '#10b981'}">
+                    ${p.pin ?
+                '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg> PIN Protected'
+                : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><path d="M8 14s1.5 2 4 2 4-2 4-2"></path><line x1="9" y1="9" x2="9.01" y2="9"></line><line x1="15" y1="9" x2="15.01" y2="9"></line></svg> Public (No PIN)'
+            }
+                </div>
+                <span style="margin-left:auto">${new Date(p.createdAt).toLocaleDateString()}</span>
+            </div>
+        `;
+        card.addEventListener('click', () => initiatePreview(p.id));
+        grid.appendChild(card);
+    });
+}
+
+// Event Listeners
+function setupEventListeners() {
+    // Add Modal toggle (Reset to Add mode)
+    addBtn.addEventListener('click', () => {
+        addForm.reset();
+        document.getElementById('addModal').removeAttribute('data-edit-id');
+        document.querySelector('#addModal h2').textContent = 'Add New Summary';
+        openModal(addModal);
+    });
+
+    // Close Modals
+    closeBtns.forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.preventDefault();
+            const modalId = btn.getAttribute('data-modal');
+            const modal = document.getElementById(modalId) || btn.closest('.modal');
+            closeModal(modal);
+        });
+    });
+
+    // Toggle Input Types in Add Form
+    pType.addEventListener('change', (e) => {
+        if (e.target.value === 'bundle') {
+            bundleInputs.style.display = 'block';
+            jsxInputs.style.display = 'none';
+        } else {
+            bundleInputs.style.display = 'none';
+            jsxInputs.style.display = 'block';
+        }
+    });
+
+    // Utility to read file as text
+    const readFileAsText = (file) => {
+        return new Promise((resolve, reject) => {
+            if (!file) {
+                resolve('');
+                return;
+            }
+            const reader = new FileReader();
+            reader.onload = (e) => resolve(e.target.result);
+            reader.onerror = (e) => reject(e);
+            reader.readAsText(file);
+        });
+    };
+
+    // Form Submit
+    addForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        const submitBtn = document.querySelector('button[form="addProjectForm"]');
+        if (submitBtn) {
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Saving...';
+        }
+
+        try {
+            const type = pType.value;
+            const editId = addModal.getAttribute('data-edit-id');
+            const isEdit = !!editId;
+            const existingProject = isEdit ? projects.find(p => p.id === editId) : null;
+
+            const newProject = {
+                id: isEdit ? editId : Date.now().toString(),
+                title: document.getElementById('pTitle').value,
+                desc: document.getElementById('pDesc').value,
+                pin: document.getElementById('pPin').value,
+                type: type,
+                createdAt: isEdit ? existingProject.createdAt : new Date().toISOString(),
+                favorite: isEdit ? (existingProject.favorite || false) : false
+            };
+
+            if (type === 'bundle') {
+                const htmlFile = document.getElementById('iHtmlFile').files[0];
+                const cssFile = document.getElementById('iCssFile').files[0];
+                const jsFile = document.getElementById('iJsFile').files[0];
+
+                newProject.html = htmlFile ? await readFileAsText(htmlFile) : (isEdit ? existingProject.html : '');
+                newProject.css = cssFile ? await readFileAsText(cssFile) : (isEdit ? existingProject.css : '');
+                newProject.js = jsFile ? await readFileAsText(jsFile) : (isEdit ? existingProject.js : '');
+            } else {
+                const jsxFile = document.getElementById('iJsxFile').files[0];
+                newProject.jsx = jsxFile ? await readFileAsText(jsxFile) : (isEdit ? existingProject.jsx : '');
+            }
+
+            if (isEdit) {
+                const index = projects.findIndex(p => p.id === editId);
+                projects[index] = newProject;
+            } else {
+                projects.push(newProject);
+            }
+
+            saveData();
+            renderGrid();
+            closeModal(addModal);
+            addForm.reset();
+        } catch (error) {
+            console.error('Error reading files:', error);
+            alert('Failed to read one or more files. Please try again.');
+        } finally {
+            if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Save Project';
+            }
+        }
+    });
+
+    // PIN Input Handling
+    pinInput.addEventListener('input', (e) => {
+        const val = e.target.value;
+        // Update dots
+        pinDots.forEach((dot, index) => {
+            if (index < val.length) {
+                dot.classList.add('filled');
+            } else {
+                dot.classList.remove('filled');
+            }
+            dot.classList.remove('error');
+        });
+        pinError.style.display = 'none';
+
+        if (val.length === 5) {
+            verifyPin(val);
+        }
+    });
+
+    // Copy Share Link
+    if (copyShareBtn) {
+        copyShareBtn.addEventListener('click', () => {
+            shareLinkInput.select();
+            document.execCommand('copy');
+            const originalText = copyShareBtn.textContent;
+            copyShareBtn.textContent = 'Copied!';
+            setTimeout(() => { copyShareBtn.textContent = originalText; }, 2000);
+        });
+    }
+
+    // Keep focus on PIN input when modal is open
+    pinModal.addEventListener('click', () => {
+        if (pinModal.classList.contains('active')) {
+            pinInput.focus();
+        }
+    });
+}
+
+function openModal(modal) {
+    modal.classList.add('active');
+}
+
+function closeModal(modal) {
+    modal.classList.remove('active');
+    if (modal.id === 'pinModal') {
+        pinInput.value = '';
+        pinDots.forEach(dot => dot.classList.remove('filled', 'error'));
+        if (pinError) pinError.style.display = 'none';
+    }
+}
+
+// Keep a reference to the project currently being previewed (either from DB or share link)
+let volatilePreviewProject = null;
+
+function initiatePreview(projectId) {
+    const project = projects.find(p => p.id === projectId);
+    if (!project) return;
+    handlePreview(project);
+}
+
+function handlePreview(project) {
+    volatilePreviewProject = project;
+    if (project.pin && project.pin.length > 0) {
+        openModal(pinModal);
+        setTimeout(() => pinInput.focus(), 100);
+    } else {
+        showPreview(project);
+    }
+}
+
+function verifyPin(enteredPin) {
+    const project = volatilePreviewProject;
+    if (!project) return;
+
+    if (project.pin === enteredPin) {
+        // Success
+        closeModal(pinModal);
+        showPreview(project);
+    } else {
+        // Error
+        pinError.style.display = 'block';
+        pinDots.forEach((dot, idx) => {
+            dot.classList.add('error');
+            dot.classList.remove('filled');
+        });
+        pinInput.value = '';
+        setTimeout(() => pinInput.focus(), 100);
+    }
+}
+
+// Global actions for card buttons
+window.toggleFavorite = function (id, e) {
+    e.stopPropagation();
+    const p = projects.find(x => x.id === id);
+    if (p) {
+        p.favorite = !p.favorite;
+        saveData();
+        renderGrid();
+    }
+}
+
+window.deleteProject = function (id, e) {
+    e.stopPropagation();
+    if (confirm('Are you sure you want to delete this project?')) {
+        projects = projects.filter(x => x.id !== id);
+        saveData();
+        renderGrid();
+    }
+}
+
+window.editProject = function (id, e) {
+    e.stopPropagation();
+    const p = projects.find(x => x.id === id);
+    if (!p) return;
+
+    // Set form mode to edit
+    addModal.setAttribute('data-edit-id', id);
+    document.querySelector('#addModal h2').textContent = 'Edit Summary';
+
+    document.getElementById('pTitle').value = p.title || '';
+    document.getElementById('pDesc').value = p.desc || '';
+    document.getElementById('pPin').value = p.pin || '';
+    document.getElementById('pType').value = p.type || 'bundle';
+    pType.dispatchEvent(new Event('change'));
+
+    openModal(addModal);
+}
+
+window.shareProject = function (id, e) {
+    e.stopPropagation();
+    const p = projects.find(x => x.id === id);
+    if (!p) return;
+
+    // Dynamically calculate base url for flexible server deployments
+    const baseUrl = window.location.origin + window.location.pathname;
+
+    // Compress data by putting it in URL hash
+    const jsonStr = JSON.stringify(p);
+    const encoded = btoa(encodeURIComponent(jsonStr));
+    const fullUrl = `${baseUrl}#share=${encoded}`;
+
+    shareLinkInput.value = fullUrl;
+    copyShareBtn.textContent = 'Copy Link';
+    openModal(shareModal);
+}
+
+function showPreview(project) {
+    const previewWindow = window.open('', '_blank');
+    if (!previewWindow) {
+        alert('Please allow popups for this website to view the preview.');
+        return;
+    }
+
+    if (project.type === 'bundle') {
+        const source = `
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>${escapeHTML(project.title)} - Preview</title>
+                <style>${project.css || ''}</style>
+            </head>
+            <body>
+                ${project.html || ''}
+                <script>
+                    try {
+                        ${project.js || ''}
+                    } catch(e) {
+                        console.error("User script error:", e);
+                    }
+                <\/script>
+            </body>
+            </html>
+        `;
+        previewWindow.document.open();
+        previewWindow.document.write(source);
+        previewWindow.document.close();
+    } else {
+        let code = project.jsx || '';
+        code = code.replace(/import\s+.*?from\s+['"].*?['"];?/g, '');
+        code = code.replace(/export\s+default\s+/g, '');
+        code = code.replace(/export\s+/g, '');
+
+        let compMatch = code.match(/(?:function|const|let|var)\s+([A-Z]\w+)/g);
+        let rootComp = '';
+        if (compMatch && compMatch.length > 0) {
+            let lastMatch = compMatch[compMatch.length - 1];
+            rootComp = lastMatch.split(/\s+/)[1];
+        }
+
+        const source = `
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>${escapeHTML(project.title)} - Preview</title>
+                <script src="https://cdn.tailwindcss.com"><\/script>
+                <script src="https://unpkg.com/react@18/umd/react.development.js"><\/script>
+                <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"><\/script>
+                <script src="https://unpkg.com/@babel/standalone/babel.min.js"><\/script>
+                <style>
+                    body { margin: 0; font-family: 'Inter', sans-serif; background: #f8fafc; }
+                    #root { min-height: 100vh; display: flex; flex-direction: column; padding: 2rem; }
+                </style>
+            </head>
+            <body>
+                <div id="root"></div>
+                <script type="text/babel" data-type="module">
+                    const { useState, useEffect, useContext, useReducer, useCallback, useMemo, useRef, useImperativeHandle, useLayoutEffect, useDebugValue } = React;
+                    
+                    ${code}
+
+                    ${rootComp ? `
+                    setTimeout(() => {
+                        const rootElement = document.getElementById('root');
+                        if (rootElement && !rootElement.innerHTML) {
+                            const root = ReactDOM.createRoot(rootElement);
+                            root.render(React.createElement(${rootComp}));
+                        }
+                    }, 50);
+                    ` : ''}
+                <\/script>
+            </body>
+            </html>
+        `;
+        previewWindow.document.open();
+        previewWindow.document.write(source);
+        previewWindow.document.close();
+    }
+}
+
+// Utility: Escape HTML to prevent XSS in rendering lists
+function escapeHTML(str) {
+    if (!str) return '';
+    return str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
+// Run
+init();
