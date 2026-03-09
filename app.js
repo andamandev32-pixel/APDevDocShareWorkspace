@@ -1,30 +1,9 @@
-// Default initial data if none exists
-const defaultProjects = [
-    {
-        id: '1',
-        title: 'Demo Website Header',
-        desc: 'A simple responsive header using HTML, CSS, and basic JS for mobile menu.',
-        pin: '12345',
-        type: 'bundle',
-        html: '<header class="demo-header">\n  <h2>Logo</h2>\n  <button onclick="alert(\'Menu Clicked\')">Menu</button>\n</header>',
-        css: 'body { margin:0; font-family: sans-serif; }\n.demo-header {\n  display: flex;\n  justify-content: space-between;\n  padding: 1rem 2rem;\n  background: #f1f5f9;\n  border-bottom: 1px solid #cbd5e1;\n}',
-        js: 'console.log("Header loaded.");',
-        createdAt: new Date().toISOString()
-    },
-    {
-        id: '2',
-        title: 'React Button Component',
-        desc: 'A snippet for a reusable React button component with variants.',
-        pin: '54321',
-        type: 'jsx',
-        jsx: 'import React from "react";\n\nconst Button = ({ variant = "primary", children, ...props }) => {\n  const baseStyle = "px-4 py-2 rounded font-medium";\n  const variants = {\n    primary: "bg-blue-600 text-white",\n    outline: "border border-gray-300 text-gray-700"\n  };\n  return (\n    <button className={`${baseStyle} ${variants[variant]}`} {...props}>\n      {children}\n    </button>\n  );\n};\n\nexport default Button;',
-        createdAt: new Date().toISOString()
-    }
-];
-
 // App State
-let projects = JSON.parse(localStorage.getItem('docshare_projects')) || defaultProjects;
+let projects = [];
 let currentPreviewId = null;
+
+// Backend API URL (Ensure this matches the uploaded location)
+const API_URL = 'api.php';
 
 // DOM Elements
 const grid = document.getElementById('projectGrid');
@@ -52,9 +31,8 @@ const pinError = document.getElementById('pinError');
 // Preview Elements (Removed modal elements, now using new tab)
 
 // Initialization
-function init() {
-    saveData();
-    renderGrid();
+async function init() {
+    await fetchProjects();
     setupEventListeners();
     checkShareLink();
 }
@@ -77,8 +55,25 @@ function checkShareLink() {
     }
 }
 
-function saveData() {
-    localStorage.setItem('docshare_projects', JSON.stringify(projects));
+async function fetchProjects() {
+    try {
+        grid.innerHTML = '<div class="empty-state"><p>Loading projects from database...</p></div>';
+        const response = await fetch(API_URL);
+        if (!response.ok) throw new Error('Network response was not ok');
+        const data = await response.json();
+
+        // Handle case where DB might be empty or table missing
+        if (Array.isArray(data)) {
+            projects = data;
+        } else {
+            console.error("API Error:", data.error);
+            projects = [];
+        }
+    } catch (error) {
+        console.error('Error fetching projects:', error);
+        projects = [];
+    }
+    renderGrid();
 }
 
 function renderGrid() {
@@ -197,7 +192,7 @@ function setupEventListeners() {
                 id: isEdit ? editId : Date.now().toString(),
                 title: document.getElementById('pTitle').value,
                 desc: document.getElementById('pDesc').value,
-                pin: document.getElementById('pPin').value,
+                pin: document.getElementById('pPin').value.trim() || null, // Ensure empty means no PIN
                 type: type,
                 createdAt: isEdit ? existingProject.createdAt : new Date().toISOString(),
                 favorite: isEdit ? (existingProject.favorite || false) : false
@@ -217,14 +212,36 @@ function setupEventListeners() {
             }
 
             if (isEdit) {
-                const index = projects.findIndex(p => p.id === editId);
-                projects[index] = newProject;
+                // UPDATE Request
+                const response = await fetch(API_URL, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(newProject)
+                });
+
+                if (response.ok) {
+                    const index = projects.findIndex(p => p.id === editId);
+                    projects[index] = newProject;
+                } else {
+                    alert('Failed to update project in database.');
+                }
             } else {
-                projects.push(newProject);
+                // CREATE Request
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(newProject)
+                });
+
+                if (response.ok) {
+                    projects.push(newProject);
+                } else {
+                    alert('Failed to save project to database.');
+                }
             }
 
-            saveData();
-            renderGrid();
+            // Always re-fetch from DB to ensure sync
+            await fetchProjects();
             closeModal(addModal);
             addForm.reset();
         } catch (error) {
@@ -329,22 +346,50 @@ function verifyPin(enteredPin) {
 }
 
 // Global actions for card buttons
-window.toggleFavorite = function (id, e) {
+window.toggleFavorite = async function (id, e) {
     e.stopPropagation();
     const p = projects.find(x => x.id === id);
     if (p) {
         p.favorite = !p.favorite;
-        saveData();
+
+        // Optimistic UI update
         renderGrid();
+
+        try {
+            // Update in DB
+            await fetch(API_URL, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(p)
+            });
+        } catch (err) {
+            console.error(err);
+            // Revert on fail
+            p.favorite = !p.favorite;
+            renderGrid();
+            alert("Database error. Could not save favorite.");
+        }
     }
 }
 
-window.deleteProject = function (id, e) {
+window.deleteProject = async function (id, e) {
     e.stopPropagation();
     if (confirm('Are you sure you want to delete this project?')) {
-        projects = projects.filter(x => x.id !== id);
-        saveData();
-        renderGrid();
+        try {
+            const response = await fetch(`${API_URL}?id=${id}`, {
+                method: 'DELETE'
+            });
+
+            if (response.ok) {
+                projects = projects.filter(x => x.id !== id);
+                renderGrid();
+            } else {
+                alert("Failed to delete project from database.");
+            }
+        } catch (err) {
+            console.error(err);
+            alert("Network error.");
+        }
     }
 }
 
@@ -366,7 +411,7 @@ window.editProject = function (id, e) {
     openModal(addModal);
 }
 
-window.shareProject = function (id, e) {
+window.shareProject = async function (id, e) {
     e.stopPropagation();
     const p = projects.find(x => x.id === id);
     if (!p) return;
@@ -379,9 +424,38 @@ window.shareProject = function (id, e) {
     const encoded = btoa(encodeURIComponent(jsonStr));
     const fullUrl = `${baseUrl}#share=${encoded}`;
 
-    shareLinkInput.value = fullUrl;
-    copyShareBtn.textContent = 'Copy Link';
+    shareLinkInput.value = 'Generating short link...';
     openModal(shareModal);
+
+    // Generate QR Code img via api.qrserver.com
+    const qrContainer = document.getElementById('qrCodeContainer');
+    if (qrContainer) {
+        qrContainer.innerHTML = '<p style="margin:0; font-size:0.8rem; color:var(--text-muted)">Loading short link & QR code...</p>';
+    }
+
+    try {
+        // Call TinyURL API to shorten the link
+        const response = await fetch(`https://tinyurl.com/api-create.php?url=${encodeURIComponent(fullUrl)}`);
+        if (response.ok) {
+            const shortUrl = await response.text();
+            shareLinkInput.value = shortUrl;
+
+            if (qrContainer) {
+                qrContainer.innerHTML = `<img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(shortUrl)}" alt="QR Code" style="margin: 0 auto; display: block; border-radius: 8px;">`;
+            }
+        } else {
+            throw new Error('API Error');
+        }
+    } catch (err) {
+        console.error("Failed to shorten URL", err);
+        // Fallback to long URL on fail
+        shareLinkInput.value = fullUrl;
+        if (qrContainer) {
+            qrContainer.innerHTML = `<img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(fullUrl)}" alt="QR Code" style="margin: 0 auto; display: block; border-radius: 8px;">`;
+        }
+    }
+
+    copyShareBtn.textContent = 'Copy Link';
 }
 
 function showPreview(project) {
