@@ -1,0 +1,12 @@
+{
+    "name": "doc-share-backend",
+    "version": "1.0.0",
+    "description": "Backend API for Document Share",
+    "main": "api/index.js",
+    "scripts": {
+        "test": "echo \"Error: no test specified\" && exit 1"
+    },
+    "dependencies": {
+        "mysql2": "^3.9.2"
+    }
+}

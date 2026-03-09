@@ -2,8 +2,8 @@
 let projects = [];
 let currentPreviewId = null;
 
-// Backend API URL (Ensure this matches the uploaded location)
-const API_URL = 'api.php';
+// Backend API URL (Vercel Node.js Serverless Function)
+const API_URL = '/api';
 
 // DOM Elements
 const grid = document.getElementById('projectGrid');
