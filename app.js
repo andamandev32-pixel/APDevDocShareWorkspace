@@ -39,18 +39,30 @@ async function init() {
 
 function checkShareLink() {
     const hash = window.location.hash;
+
+    // Legacy support for offline links (#share=)
     if (hash.startsWith('#share=')) {
         try {
             const dataStr = atob(hash.replace('#share=', ''));
             const sharedProj = JSON.parse(decodeURIComponent(dataStr));
-
-            // Clean hash to prevent repeated opens on refresh
             window.history.replaceState(null, null, ' ');
-
             handlePreview(sharedProj);
         } catch (e) {
             console.error('Failed to parse shared link', e);
             alert('This share link is invalid or corrupted.');
+        }
+    }
+    // New database link support (#id=)
+    else if (hash.startsWith('#id=')) {
+        const id = hash.replace('#id=', '');
+        const sharedProj = projects.find(p => p.id === id);
+
+        if (sharedProj) {
+            window.history.replaceState(null, null, ' ');
+            handlePreview(sharedProj);
+        } else {
+            console.error('Project ID not found in database:', id);
+            alert('The requested shared project could not be found or has been deleted.');
         }
     }
 }
@@ -427,40 +439,16 @@ window.shareProject = async function (id, e) {
     // Dynamically calculate base url for flexible server deployments
     const baseUrl = window.location.origin + window.location.pathname;
 
-    // Compress data by putting it in URL hash
-    const jsonStr = JSON.stringify(p);
-    const encoded = btoa(encodeURIComponent(jsonStr));
-    const fullUrl = `${baseUrl}#share=${encoded}`;
+    // Use lightweight Database ID routing instead of massive Base64 payload
+    const fullUrl = `${baseUrl}#id=${id}`;
 
-    shareLinkInput.value = 'Generating short link...';
+    shareLinkInput.value = fullUrl;
     openModal(shareModal);
 
-    // Generate QR Code img via api.qrserver.com
+    // Generate QR Code directly (NO MORE API SHORTENERS FAILING TIMEOUTS 🔥)
     const qrContainer = document.getElementById('qrCodeContainer');
     if (qrContainer) {
-        qrContainer.innerHTML = '<p style="margin:0; font-size:0.8rem; color:var(--text-muted)">Loading short link & QR code...</p>';
-    }
-
-    try {
-        // Call Is.gd API to shorten the link (Alternative to TinyURL which was timing out)
-        const response = await fetch(`https://is.gd/create.php?format=simple&url=${encodeURIComponent(fullUrl)}`);
-        if (response.ok) {
-            const shortUrl = await response.text();
-            shareLinkInput.value = shortUrl;
-
-            if (qrContainer) {
-                qrContainer.innerHTML = `<img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(shortUrl)}" alt="QR Code" style="margin: 0 auto; display: block; border-radius: 8px;">`;
-            }
-        } else {
-            throw new Error('API Error');
-        }
-    } catch (err) {
-        console.error("Failed to shorten URL", err);
-        // Fallback to long URL on fail
-        shareLinkInput.value = fullUrl;
-        if (qrContainer) {
-            qrContainer.innerHTML = `<img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(fullUrl)}" alt="QR Code" style="margin: 0 auto; display: block; border-radius: 8px;">`;
-        }
+        qrContainer.innerHTML = `<img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(fullUrl)}" alt="QR Code" style="margin: 0 auto; display: block; border-radius: 8px;">`;
     }
 
     copyShareBtn.textContent = 'Copy Link';
