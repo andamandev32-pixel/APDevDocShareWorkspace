@@ -437,12 +437,81 @@ function showPreview(project) {
                 <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"><\/script>
                 <script src="https://unpkg.com/@babel/standalone/babel.min.js"><\/script>
                 <style>
-                    body { margin: 0; font-family: 'Inter', sans-serif; background: #f8fafc; }
-                    #root { min-height: 100vh; display: flex; flex-direction: column; padding: 2rem; }
+                    body { margin: 0; font-family: 'Inter', sans-serif; background: #f8fafc; overflow-x: hidden; }
+                    
+                    /* Zoom Controls Toolbar */
+                    #toolbar {
+                        position: fixed;
+                        top: 1rem;
+                        right: 1rem;
+                        background: rgba(255, 255, 255, 0.9);
+                        backdrop-filter: blur(8px);
+                        border: 1px solid #e2e8f0;
+                        border-radius: 8px;
+                        padding: 0.25rem;
+                        display: flex;
+                        gap: 0.5rem;
+                        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+                        z-index: 9999;
+                    }
+                    .toolbar-btn {
+                        background: transparent;
+                        border: none;
+                        width: 32px;
+                        height: 32px;
+                        border-radius: 4px;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        cursor: pointer;
+                        font-weight: 600;
+                        color: #475569;
+                        transition: all 0.2s;
+                    }
+                    .toolbar-btn:hover { background: #f1f5f9; color: #0f172a; }
+
+                    #viewport {
+                        transform-origin: top center;
+                        transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+                        width: 100%;
+                        min-height: 100vh;
+                    }
+
+                    #root { display: flex; flex-direction: column; padding: 2rem; }
                 </style>
             </head>
             <body>
-                <div id="root"></div>
+                <div id="toolbar">
+                    <button class="toolbar-btn" onclick="setZoom(currentZoom - 0.1)" title="Zoom Out">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                    </button>
+                    <button class="toolbar-btn" style="font-size:0.8rem; width: 44px;" onclick="setZoom(1)" title="Reset Zoom" id="zoomLevel">100%</button>
+                    <button class="toolbar-btn" onclick="setZoom(currentZoom + 0.1)" title="Zoom In">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                    </button>
+                </div>
+
+                <div id="viewport">
+                    <div id="root"></div>
+                </div>
+
+                <script>
+                    let currentZoom = 1;
+                    function setZoom(level) {
+                        currentZoom = Math.max(0.5, Math.min(3, level));
+                        document.getElementById('viewport').style.transform = \`scale(\${currentZoom})\`;
+                        
+                        // Adjust width to prevent scrollbar issues when zooming out
+                        if(currentZoom < 1) {
+                            document.getElementById('viewport').style.width = \`\${(1 / currentZoom) * 100}%\`;
+                        } else {
+                            document.getElementById('viewport').style.width = '100%';
+                        }
+
+                        document.getElementById('zoomLevel').innerText = Math.round(currentZoom * 100) + '%';
+                    }
+                <\/script>
+
                 <script type="text/babel" data-type="module">
                     const { useState, useEffect, useContext, useReducer, useCallback, useMemo, useRef, useImperativeHandle, useLayoutEffect, useDebugValue } = React;
                     
