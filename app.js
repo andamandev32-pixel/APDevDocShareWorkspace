@@ -442,8 +442,8 @@ window.shareProject = async function (id, e) {
     }
 
     try {
-        // Call TinyURL API to shorten the link
-        const response = await fetch(`https://tinyurl.com/api-create.php?url=${encodeURIComponent(fullUrl)}`);
+        // Call Is.gd API to shorten the link (Alternative to TinyURL which was timing out)
+        const response = await fetch(`https://is.gd/create.php?format=simple&url=${encodeURIComponent(fullUrl)}`);
         if (response.ok) {
             const shortUrl = await response.text();
             shareLinkInput.value = shortUrl;
