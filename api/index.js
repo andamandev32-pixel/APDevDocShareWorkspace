@@ -67,6 +67,9 @@ module.exports = async (req, res) => {
                       (id, title, description, pin, project_type, html_content, css_content, js_content, jsx_content, favorite, created_at) 
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 `;
+                const rawDate = data.createdAt ? new Date(data.createdAt) : new Date();
+                const formattedDate = rawDate.toISOString().slice(0, 19).replace('T', ' ');
+
                 const values = [
                     data.id,
                     data.title,
@@ -78,7 +81,7 @@ module.exports = async (req, res) => {
                     data.js || null,
                     data.jsx || null,
                     data.favorite ? 1 : 0,
-                    data.createdAt || new Date().toISOString()
+                    formattedDate
                 ];
                 await connection.execute(query, values);
                 res.status(201).json({ message: 'Project created' });
