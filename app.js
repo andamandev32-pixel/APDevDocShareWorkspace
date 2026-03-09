@@ -158,6 +158,12 @@ function setupEventListeners() {
         }
     });
 
+    // Enforce 5 digits only for PIN (removes spaces, letters)
+    const pPin = document.getElementById('pPin');
+    pPin.addEventListener('input', (e) => {
+        e.target.value = e.target.value.replace(/\D/g, '').substring(0, 5);
+    });
+
     // Utility to read file as text
     const readFileAsText = (file) => {
         return new Promise((resolve, reject) => {
