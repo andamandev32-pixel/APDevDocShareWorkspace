@@ -188,11 +188,13 @@ function setupEventListeners() {
             const isEdit = !!editId;
             const existingProject = isEdit ? projects.find(p => p.id === editId) : null;
 
+            const rawPin = document.getElementById('pPin').value.trim();
+
             const newProject = {
                 id: isEdit ? editId : Date.now().toString(),
                 title: document.getElementById('pTitle').value,
                 desc: document.getElementById('pDesc').value,
-                pin: document.getElementById('pPin').value.trim() || null, // Ensure empty means no PIN
+                pin: rawPin.length > 0 ? rawPin : null, // Ensure empty means no PIN
                 type: type,
                 createdAt: isEdit ? existingProject.createdAt : new Date().toISOString(),
                 favorite: isEdit ? (existingProject.favorite || false) : false

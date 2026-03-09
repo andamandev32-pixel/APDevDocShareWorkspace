@@ -103,7 +103,7 @@ module.exports = async (req, res) => {
                 const values = [
                     data.title,
                     data.desc || '',
-                    data.pin || null,
+                    (data.pin === undefined || data.pin === '') ? null : data.pin,
                     data.type,
                     data.html || null,
                     data.css || null,
